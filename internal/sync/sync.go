@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"sort"
 
-	"svctool/internal/config"
-	"svctool/internal/manifest"
-	"svctool/internal/plan"
+	"sdm/internal/config"
+	"sdm/internal/manifest"
+	"sdm/internal/plan"
 )
 
 // Mode selects reconcile behavior.

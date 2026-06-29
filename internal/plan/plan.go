@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"svctool/internal/config"
-	"svctool/internal/render"
+	"sdm/internal/config"
+	"sdm/internal/render"
 )
 
 // File is one desired output file.

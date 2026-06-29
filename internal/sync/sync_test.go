@@ -5,14 +5,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"svctool/internal/manifest"
-	"svctool/internal/plan"
+	"sdm/internal/manifest"
+	"sdm/internal/plan"
 )
 
 func newEngine(t *testing.T) (*Engine, string) {
 	t.Helper()
 	root := t.TempDir()
-	mf, _ := manifest.Load(filepath.Join(root, "svctool-manifest.yaml"))
+	mf, _ := manifest.Load(filepath.Join(root, "sdm-manifest.yaml"))
 	return &Engine{RepoRoot: root, Manifest: mf}, root
 }
 

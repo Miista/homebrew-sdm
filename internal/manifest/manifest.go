@@ -11,8 +11,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"svctool/internal/config"
-	"svctool/internal/plan"
+	"sdm/internal/config"
+	"sdm/internal/plan"
 )
 
 // Manifest maps service name -> the file paths it generated.

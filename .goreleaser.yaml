@@ -1,17 +1,19 @@
 version: 2
 
+project_name: sdm
+
 builds:
-  - id: svctool
+  - id: sdm
     main: .
-    binary: svctool
+    binary: sdm
     goos: [linux, darwin]
     goarch: [amd64, arm64]
     ldflags:
-      - -s -w -X svctool/internal/cli.Version={{.Version}}
+      - -s -w -X sdm/internal/cli.Version={{.Version}}
 
 archives:
   - id: default
-    ids: [svctool]
+    ids: [sdm]
     formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
@@ -22,7 +24,7 @@ checksum:
   name_template: checksums.txt
 
 brews:
-  - name: svctool
+  - name: sdm
     repository:
       owner: Miista
       name: homebrew-sdm
@@ -35,6 +37,6 @@ brews:
     description: Generate split-horizon DNS (Pi-hole/dnsmasq) and Caddy site blocks from a declarative services.yaml
     license: MIT
     install: |
-      bin.install "svctool"
+      bin.install "sdm"
     test: |
-      assert_match "svctool", shell_output("#{bin}/svctool version")
+      assert_match "sdm", shell_output("#{bin}/sdm version")

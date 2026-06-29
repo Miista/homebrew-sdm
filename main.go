@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"svctool/internal/cli"
+	"sdm/internal/cli"
 )
 
 func main() {

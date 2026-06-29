@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"svctool/internal/config"
+	"sdm/internal/config"
 )
 
 // cmdHost handles `host add|remove`. The schema key stays machines: (design
@@ -16,7 +16,7 @@ import (
 // affected services.
 func cmdHost(cfgPath string, args []string) int {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: svctool host add|remove <name> ...")
+		fmt.Fprintln(os.Stderr, "usage: sdm host add|remove <name> ...")
 		return 2
 	}
 	sub, rest := args[0], args[1:]
@@ -103,7 +103,7 @@ func hostRemove(cfgPath string, args []string) int {
 // cmdDomain handles `domain add|remove`.
 func cmdDomain(cfgPath string, args []string) int {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: svctool domain add|remove <name> ...")
+		fmt.Fprintln(os.Stderr, "usage: sdm domain add|remove <name> ...")
 		return 2
 	}
 	sub, rest := args[0], args[1:]

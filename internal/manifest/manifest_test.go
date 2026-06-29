@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"svctool/internal/plan"
+	"sdm/internal/plan"
 )
 
 func TestLoad_Missing(t *testing.T) {

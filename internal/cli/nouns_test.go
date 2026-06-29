@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"svctool/internal/config"
+	"sdm/internal/config"
 )
 
 func load(t *testing.T, dir string) *config.Config {

@@ -1,4 +1,4 @@
-module svctool
+module sdm
 
 go 1.26.4
 

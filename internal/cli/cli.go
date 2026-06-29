@@ -10,19 +10,19 @@ import (
 	"path/filepath"
 	"strings"
 
-	"svctool/internal/config"
-	"svctool/internal/manifest"
-	"svctool/internal/plan"
-	syncpkg "svctool/internal/sync"
+	"sdm/internal/config"
+	"sdm/internal/manifest"
+	"sdm/internal/plan"
+	syncpkg "sdm/internal/sync"
 )
 
 const (
 	configName   = "services.yaml"
-	manifestName = "svctool-manifest.yaml"
+	manifestName = "sdm-manifest.yaml"
 )
 
 // Version is the build version, overridden at release time via
-// -ldflags "-X svctool/internal/cli.Version=...".
+// -ldflags "-X sdm/internal/cli.Version=...".
 var Version = "dev"
 
 // Run executes the CLI. Returns a process exit code (design §8: non-zero if
@@ -54,7 +54,7 @@ func Run(args []string) int {
 
 	switch cmd {
 	case "version", "--version", "-v":
-		fmt.Println("svctool", Version)
+		fmt.Println("sdm", Version)
 		return 0
 	case "add":
 		return cmdAdd(repoRoot, cfgPath, rest)
@@ -297,7 +297,7 @@ func loadExisting(cfgPath, command string) (*config.Config, int) {
 	if !cfg.Exists {
 		fmt.Fprintf(os.Stderr, "no %s in this directory — nothing to %s.\n", configName, command)
 		fmt.Fprintln(os.Stderr, "create your first service with:")
-		fmt.Fprintln(os.Stderr, "  svctool add <name> --fqdn <fqdn> --host <machine> --backend <name:port>")
+		fmt.Fprintln(os.Stderr, "  sdm add <name> --fqdn <fqdn> --host <machine> --backend <name:port>")
 		fmt.Fprintln(os.Stderr, "(or run from the repo root, or use -C <dir>)")
 		return nil, 1
 	}
@@ -314,22 +314,22 @@ func leadingName(args []string) (name string, rest []string, ok bool) {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `svctool — generate split-horizon DNS + Caddy site blocks from services.yaml
+	fmt.Fprint(os.Stderr, `sdm — generate split-horizon DNS + Caddy site blocks from services.yaml
 
 Operates on services.yaml in the current directory.
 
 Usage:
-  svctool [-C <dir>] add    <service> --fqdn <f> --host <h> --backend <b> [--dns-host <d>]
-  svctool [-C <dir>] update <service> [--fqdn ...] [--host ...] [--backend ...] [--dns-host ...]
-  svctool [-C <dir>] remove <service>
-  svctool [-C <dir>] sync   [--incremental | --complete]
+  sdm [-C <dir>] add    <service> --fqdn <f> --host <h> --backend <b> [--dns-host <d>]
+  sdm [-C <dir>] update <service> [--fqdn ...] [--host ...] [--backend ...] [--dns-host ...]
+  sdm [-C <dir>] remove <service>
+  sdm [-C <dir>] sync   [--incremental | --complete]
 
-  svctool [-C <dir>] host   add    <name> --ip <ip> --dir <dir> [--dnsmasq-dir <d>] [--caddy-sites-dir <d>]
-  svctool [-C <dir>] host   remove <name>
-  svctool [-C <dir>] domain add    <name> --tls-import <snippet>
-  svctool [-C <dir>] domain remove <name>
+  sdm [-C <dir>] host   add    <name> --ip <ip> --dir <dir> [--dnsmasq-dir <d>] [--caddy-sites-dir <d>]
+  sdm [-C <dir>] host   remove <name>
+  sdm [-C <dir>] domain add    <name> --tls-import <snippet>
+  sdm [-C <dir>] domain remove <name>
 
-  -C <dir>   run as if svctool were started in <dir> (default: current dir)
+  -C <dir>   run as if sdm were started in <dir> (default: current dir)
 
 host/domain define the building blocks a service references; remove refuses
 while any service still uses the host or domain.
