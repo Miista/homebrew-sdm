@@ -1,7 +1,4 @@
-hosts:
-    pi:
-        ip: 10.0.5.50
-        dir: pi
+hosts: {}
 domains: {}
 defaults:
     dns_host: ""
