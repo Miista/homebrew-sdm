@@ -3,3 +3,6 @@
 paperless:
     - pi/caddy/data/sites/paperless.caddy
     - pi/pihole/data/dnsmasq.d/generated/paperless.conf
+paperless1:
+    - pi/caddy/data/sites/paperless1.caddy
+    - pi/pihole/data/dnsmasq.d/generated/paperless1.conf

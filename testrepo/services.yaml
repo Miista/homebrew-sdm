@@ -4,9 +4,13 @@ hosts:
 domains:
     guldmund.dk: {}
 defaults:
-    dns_host: ""
+    dns_host: pi
 services:
     paperless:
         fqdn: docs.guldmund.dk
+        host: pi
+        backend: paperless:8080
+    paperless1:
+        fqdn: docs1.guldmund.dk
         host: pi
         backend: paperless:8080
