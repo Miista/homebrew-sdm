@@ -1,0 +1,205 @@
+// Package plan validates each service independently and produces the desired
+// set of (path, content) files, collecting per-entry errors rather than
+// stopping (design §7).
+package plan
+
+import (
+	"fmt"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+
+	"svctool/internal/config"
+	"svctool/internal/render"
+)
+
+// File is one desired output file.
+type File struct {
+	Path    string
+	Content string
+}
+
+// Plan is the result of validating a Config.
+type Plan struct {
+	// Files keyed by service name -> its desired files.
+	Files map[string][]File
+	// Skipped service -> reason.
+	Skipped map[string]string
+	// Total number of services considered.
+	Total int
+}
+
+// Valid returns service names that produced files (sorted).
+func (p *Plan) Valid() []string {
+	out := make([]string, 0, len(p.Files))
+	for s := range p.Files {
+		out = append(out, s)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// SkippedNames returns skipped service names (sorted).
+func (p *Plan) SkippedNames() []string {
+	out := make([]string, 0, len(p.Skipped))
+	for s := range p.Skipped {
+		out = append(out, s)
+	}
+	sort.Strings(out)
+	return out
+}
+
+var (
+	// name:port shape for backends (design §4.2/§7).
+	backendRe = regexp.MustCompile(`^[A-Za-z0-9._-]+:[0-9]+$`)
+	// crude fqdn well-formedness.
+	fqdnRe = regexp.MustCompile(`^([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$`)
+)
+
+// Build validates every service and returns the desired plan.
+func Build(c *config.Config) *Plan {
+	p := &Plan{
+		Files:   map[string][]File{},
+		Skipped: map[string]string{},
+		Total:   len(c.Services),
+	}
+
+	machineNames := sortedKeys(c.Machines)
+
+	// First pass: detect fqdn collisions and filename collisions across the
+	// whole set so both sides of a conflict can be reported (design §7).
+	fqdnOwners := map[string][]string{}
+	pathOwners := map[string][]string{}
+	tentative := map[string][]File{} // svc -> files, before collision pruning
+
+	for name, svc := range c.Services {
+		files, reason := planService(c, name, svc, machineNames)
+		if reason != "" {
+			p.Skipped[name] = reason
+			continue
+		}
+		fqdnOwners[svc.FQDN] = append(fqdnOwners[svc.FQDN], name)
+		for _, f := range files {
+			pathOwners[f.Path] = append(pathOwners[f.Path], name)
+		}
+		tentative[name] = files
+	}
+
+	// Mark fqdn collisions.
+	for fqdn, owners := range fqdnOwners {
+		if len(owners) > 1 {
+			sort.Strings(owners)
+			for _, o := range owners {
+				p.Skipped[o] = fmt.Sprintf("fqdn collision on %q with %s", fqdn, joinOthers(owners, o))
+				delete(tentative, o)
+			}
+		}
+	}
+	// Mark filename collisions among survivors.
+	for path, owners := range pathOwners {
+		live := filterLive(owners, tentative)
+		if len(live) > 1 {
+			sort.Strings(live)
+			for _, o := range live {
+				p.Skipped[o] = fmt.Sprintf("output path collision on %q with %s", path, joinOthers(live, o))
+				delete(tentative, o)
+			}
+		}
+	}
+
+	for name, files := range tentative {
+		p.Files[name] = files
+	}
+	return p
+}
+
+// planService validates one entry and returns its files or a skip reason.
+func planService(c *config.Config, name string, svc config.Service, machineNames []string) ([]File, string) {
+	// fqdn well-formed
+	if !fqdnRe.MatchString(svc.FQDN) {
+		return nil, fmt.Sprintf("malformed fqdn %q", svc.FQDN)
+	}
+	// domain suffix -> tls_import
+	tlsImport, ok := matchDomain(c, svc.FQDN)
+	if !ok {
+		return nil, fmt.Sprintf("fqdn %q matches no domain in %v", svc.FQDN, sortedKeys(c.Domains))
+	}
+	// host machine
+	hostM, ok := c.Machines[svc.Host]
+	if !ok {
+		return nil, fmt.Sprintf("unknown host %q — defined machines: %s", svc.Host, strings.Join(machineNames, ", "))
+	}
+	if hostM.IP == "" {
+		return nil, fmt.Sprintf("host %q has no ip", svc.Host)
+	}
+	// dns_host machine
+	dnsHostName := c.DNSHostFor(svc)
+	if dnsHostName == "" {
+		return nil, "no dns_host resolved (set defaults.dns_host or per-service dns_host)"
+	}
+	dnsM, ok := c.Machines[dnsHostName]
+	if !ok {
+		return nil, fmt.Sprintf("unknown dns_host %q — defined machines: %s", dnsHostName, strings.Join(machineNames, ", "))
+	}
+	// backend shape
+	if !backendRe.MatchString(svc.Backend) {
+		return nil, fmt.Sprintf("backend %q is not name:port shape", svc.Backend)
+	}
+
+	dnsPath := filepath.Join(dnsM.Dir, dnsM.ResolvedDnsmasqDir(), name+".conf")
+	caddyPath := filepath.Join(hostM.Dir, hostM.ResolvedCaddySitesDir(), name+".caddy")
+
+	return []File{
+		{Path: dnsPath, Content: render.DNSRecord(svc.FQDN, hostM.IP)},
+		{Path: caddyPath, Content: render.CaddySite(svc.FQDN, tlsImport, svc.Backend)},
+	}, ""
+}
+
+// matchDomain selects the tls_import by the longest matching registrable
+// domain suffix of fqdn against the domains map.
+func matchDomain(c *config.Config, fqdn string) (string, bool) {
+	var bestKey string
+	for dom := range c.Domains {
+		if fqdn == dom || strings.HasSuffix(fqdn, "."+dom) {
+			if len(dom) > len(bestKey) {
+				bestKey = dom
+			}
+		}
+	}
+	if bestKey == "" {
+		return "", false
+	}
+	return c.Domains[bestKey].TLSImport, true
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func joinOthers(all []string, self string) string {
+	others := make([]string, 0, len(all)-1)
+	for _, x := range all {
+		if x != self {
+			others = append(others, x)
+		}
+	}
+	return strings.Join(others, ", ")
+}
+
+func filterLive(owners []string, live map[string][]File) []string {
+	out := make([]string, 0, len(owners))
+	seen := map[string]bool{}
+	for _, o := range owners {
+		if _, ok := live[o]; ok && !seen[o] {
+			out = append(out, o)
+			seen[o] = true
+		}
+	}
+	return out
+}

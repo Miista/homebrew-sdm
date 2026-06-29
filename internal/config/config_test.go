@@ -1,0 +1,166 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestLoad_Missing(t *testing.T) {
+	c, err := Load(filepath.Join(t.TempDir(), "services.yaml"))
+	if err != nil {
+		t.Fatalf("missing file should not error: %v", err)
+	}
+	if c.Exists {
+		t.Error("Exists should be false for a missing file")
+	}
+	if len(c.Services) != 0 {
+		t.Errorf("missing file should yield empty services, got %d", len(c.Services))
+	}
+}
+
+func TestLoad_Present(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "services.yaml")
+	write(t, path, "machines: {}\ndomains: {}\nservices: {}\n")
+
+	c, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !c.Exists {
+		t.Error("Exists should be true for a present file")
+	}
+}
+
+func TestLoad_Malformed(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "services.yaml")
+	write(t, path, "machines: {\n  this is : : not yaml\n")
+
+	if _, err := Load(path); err == nil {
+		t.Fatal("malformed yaml should be a fatal error")
+	}
+}
+
+func TestSaveLoad_RoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "services.yaml")
+
+	c, _ := Load(path)
+	c.Machines["resolver"] = Machine{IP: "192.0.2.1", Dir: "resolver"}
+	c.Domains["example.com"] = Domain{TLSImport: "tls_example_com"}
+	c.Defaults.DNSHost = "resolver"
+	c.Services["docs"] = Service{FQDN: "docs.example.com", Host: "resolver", Backend: "paperless:8000"}
+	if err := c.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	c2, err := Load(path)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if c2.Machines["resolver"].IP != "192.0.2.1" {
+		t.Errorf("machine not round-tripped: %+v", c2.Machines["resolver"])
+	}
+	if c2.Services["docs"].Backend != "paperless:8000" {
+		t.Errorf("service not round-tripped: %+v", c2.Services["docs"])
+	}
+	if c2.Defaults.DNSHost != "resolver" {
+		t.Errorf("defaults not round-tripped: %+v", c2.Defaults)
+	}
+}
+
+func TestResolvedDirs_Defaults(t *testing.T) {
+	m := Machine{Dir: "resolver"}
+	if got := m.ResolvedDnsmasqDir(); got != DefaultDnsmasqDir {
+		t.Errorf("dnsmasq default: got %q want %q", got, DefaultDnsmasqDir)
+	}
+	if got := m.ResolvedCaddySitesDir(); got != DefaultCaddySitesDir {
+		t.Errorf("caddy default: got %q want %q", got, DefaultCaddySitesDir)
+	}
+}
+
+func TestResolvedDirs_Override(t *testing.T) {
+	m := Machine{Dir: "resolver", DnsmasqDir: "custom/dns", CaddySitesDir: "custom/caddy"}
+	if got := m.ResolvedDnsmasqDir(); got != "custom/dns" {
+		t.Errorf("dnsmasq override ignored: %q", got)
+	}
+	if got := m.ResolvedCaddySitesDir(); got != "custom/caddy" {
+		t.Errorf("caddy override ignored: %q", got)
+	}
+}
+
+func TestDNSHostFor(t *testing.T) {
+	c := &Config{Defaults: Defaults{DNSHost: "resolver"}}
+	if got := c.DNSHostFor(Service{}); got != "resolver" {
+		t.Errorf("default dns_host: got %q want resolver", got)
+	}
+	if got := c.DNSHostFor(Service{DNSHost: "appbox"}); got != "appbox" {
+		t.Errorf("override dns_host: got %q want appbox", got)
+	}
+}
+
+// AtomicWrite must not leave temp files behind on success (design §9).
+func TestAtomicWrite_NoTempLeak(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sub", "out.conf")
+	if err := AtomicWrite(path, []byte("hi")); err != nil {
+		t.Fatalf("AtomicWrite: %v", err)
+	}
+	got, _ := os.ReadFile(path)
+	if string(got) != "hi" {
+		t.Errorf("content: got %q", got)
+	}
+	entries, _ := os.ReadDir(filepath.Dir(path))
+	for _, e := range entries {
+		if e.Name() != "out.conf" {
+			t.Errorf("stray file left behind: %q", e.Name())
+		}
+	}
+}
+
+func TestServicesUsingHost(t *testing.T) {
+	c := &Config{
+		Defaults: Defaults{DNSHost: "resolver"},
+		Services: map[string]Service{
+			"docs":   {FQDN: "docs.example.com", Host: "appbox"},     // dns_host defaults to resolver
+			"photos": {FQDN: "photos.example.net", Host: "resolver"}, // host = resolver
+			"vault":  {FQDN: "vault.example.net", Host: "appbox", DNSHost: "appbox"},
+		},
+	}
+	// appbox is host of docs+vault, and dns_host of vault.
+	if got := c.ServicesUsingHost("appbox"); len(got) != 2 || got[0] != "docs" || got[1] != "vault" {
+		t.Errorf("appbox users: %v", got)
+	}
+	// resolver is host of photos and the default dns_host of docs.
+	got := c.ServicesUsingHost("resolver")
+	if len(got) != 2 || got[0] != "docs" || got[1] != "photos" {
+		t.Errorf("resolver users: %v", got)
+	}
+	if got := c.ServicesUsingHost("ghost"); len(got) != 0 {
+		t.Errorf("unused host should have no users: %v", got)
+	}
+}
+
+func TestServicesUsingDomain(t *testing.T) {
+	c := &Config{Services: map[string]Service{
+		"docs":   {FQDN: "docs.example.com"},
+		"sub":    {FQDN: "a.b.example.com"},
+		"photos": {FQDN: "photos.example.net"},
+	}}
+	got := c.ServicesUsingDomain("example.com")
+	if len(got) != 2 || got[0] != "docs" || got[1] != "sub" {
+		t.Errorf("example.com users: %v", got)
+	}
+	if got := c.ServicesUsingDomain("unused.net"); len(got) != 0 {
+		t.Errorf("unused domain should have no users: %v", got)
+	}
+}
+
+func write(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}

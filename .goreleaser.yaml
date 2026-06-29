@@ -1,0 +1,40 @@
+version: 2
+
+builds:
+  - id: svctool
+    main: .
+    binary: svctool
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X svctool/internal/cli.Version={{.Version}}
+
+archives:
+  - id: default
+    builds: [svctool]
+    format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+brews:
+  - name: svctool
+    repository:
+      owner: Miista
+      name: homebrew-sdm
+      token: "{{ .Env.GITHUB_TOKEN }}"
+    directory: Formula
+    commit_author:
+      name: goreleaser-bot
+      email: bot@goreleaser.com
+    homepage: https://github.com/Miista/homebrew-sdm
+    description: Generate split-horizon DNS (Pi-hole/dnsmasq) and Caddy site blocks from a declarative services.yaml
+    license: MIT
+    install: |
+      bin.install "svctool"
+    test: |
+      assert_match "svctool", shell_output("#{bin}/svctool version")
