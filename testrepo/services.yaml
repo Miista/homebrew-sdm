@@ -4,7 +4,7 @@ hosts:
 domains:
     guldmund.dk: {}
 defaults:
-    dns_host: pi
+    dns_host: ""
 services:
     paperless:
         fqdn: docs.guldmund.dk
