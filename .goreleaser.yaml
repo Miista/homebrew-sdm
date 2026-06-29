@@ -11,8 +11,8 @@ builds:
 
 archives:
   - id: default
-    builds: [svctool]
-    format: tar.gz
+    ids: [svctool]
+    formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - LICENSE
