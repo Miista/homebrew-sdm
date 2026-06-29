@@ -1,6 +1,4 @@
 hosts:
-    optiplex:
-        ip: 10.0.5.50
     pi:
         ip: 10.0.5.50
 domains: {}
